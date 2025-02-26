@@ -1,0 +1,151 @@
+#include <UrlEncode.h>               // Include library for URL encoding
+#include <ESP8266WebServer.h>       // Include library for ESP8266 web server
+#include <ESP8266HTTPClient.h>      // Include library for HTTP client on ESP8266
+#include "ESP8266WiFi.h"            // Include library for ESP8266 WiFi functionality
+#include "HUSKYLENS.h"              // Include library for HUSKYLENS
+#include "SoftwareSerial.h"         // Include library for software serial communication
+
+HUSKYLENS huskylens;
+SoftwareSerial mySerial(D1, D2);     // RX, TX for software serial communication with HUSKYLENS
+
+// Function to print the result obtained from HUSKYLENS
+void printResult(HUSKYLENSResult result);
+
+// Constants for phone number and API key (change as needed)
+const String Number = "*********"; // Default phone number
+const String APIKey = "*********";      // Default API key
+
+long last_micros;   // Variable to track last micros time
+int illegal;        // Variable to track illegal status
+int x = 1;          
+
+// WiFi credentials (change as needed)
+const String ssid = "XXXXXXX";  // Network SSID (name)
+const String pass = "XXXXXXX";   // Network password
+
+ESP8266WebServer server(80);  // Create ESP8266 web server object on port 80 (default HTTP port)
+
+// Function to connect to WiFi network
+void connectToWifi(String myssid, String mypass) {
+  Serial.println("Start");
+  WiFi.mode(WIFI_STA);       // Set WiFi mode to station (client) mode
+  WiFi.disconnect();          // Disconnect from any previous WiFi connection
+  delay(100);
+  Serial.println("Setup done");
+ 
+  // Connect to the specified WiFi network
+  Serial.print("Connecting to ");
+  Serial.println(myssid);
+  WiFi.begin(myssid, mypass);
+
+  // Wait for WiFi connection to be established
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(".");
+  Serial.print("Use this URL to connect: http://");
+  Serial.println(WiFi.localIP()); // Print IP address assigned to ESP8266
+}
+
+// Function to handle data submission from web page
+void data() {
+  String s = "";
+  s += "<html>";
+  s += "<head>";
+  s += "<meta charset=\"UTF-8\">";
+  s += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  s += "<link href=\"https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;700&display=swap\" rel=\"stylesheet\">";
+  s += "<style>";
+  s += "body {";
+  s += "font-family: 'Ubuntu', sans-serif;";
+  s += "}";
+  s += "</style>";
+  s += "<title>Special Blue</title>";
+  s += "</head>";
+  s += "<body>";
+  s += "<h1>Hello!</h1>";
+  s += "<h2>The Numbers below should be your phone number and API Key.<br> If not, then press go back and enter the correct information.<br>Otherwise, press \"confirm\" to begin recieving messages</h2>";
+  s += "<br>";
+
+  // Get phone number and API key from form submission
+  const String Number = server.arg("number");
+  const String APIKey = server.arg("key");
+
+  s += "<h3> Phone Number: " + Number + "</h3>";
+  s += "<br>";
+  s += "<h3> API Key: " + APIKey + "</h3>";
+  s += "<a href = \' / \'> Go Back </a>";
+  s += "<a href=\"/confirm\"><button>Confirm</button></a>";
+  s += "</body></html>"; // Read HTML contents
+  server.send(200, "text/html", s); // Send web page
+}
+
+// Function to send WhatsApp message using callmebot API
+void sendMessage(String message) {
+  Serial.println(Number);
+  Serial.println(APIKey);
+ 
+  // Construct URL for callmebot API with phone number, API key, and message
+  String url = "http://api.callmebot.com/whatsapp.php?phone=" + Number + "&apikey=" + APIKey + "&text=" + urlEncode(message);
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, url); // Begin HTTP connection to specified URL
+
+  // Specify content-type header
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+  // Send HTTP POST request
+  int httpResponseCode = http.POST(url);
+  if (httpResponseCode == 200) {
+    Serial.print("Message sent successfully");
+  } else {
+    Serial.println("Error sending the message");
+    Serial.print("HTTP response code: ");
+    Serial.println(httpResponseCode);
+  }
+
+  // Free resources
+  http.end();
+}
+
+// Function to display main page with instructions and form for phone number and API key
+void mainPage() {
+  String s = "";
+  s += "<html>";
+  s += "<head>";
+  s += "<meta charset=\"UTF-8\">";
+  s += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  s += "<title>Special Blue</title>";
+
+  s += "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Titillium+Web&display=swap\">";
+  s += "<style>";
+  s += "body {";
+  s += "font-family: 'Titillium Web', sans-serif;";
+  s += "}";
+  s += "</style>";
+  s += "</head>";
+  s += "<body>";
+  s += "<h1>Welcome to Special Blue!</h1>";
+  s += "<h2>Instructions:</h2>";
+  s += "<p>1. Add the phone number +34 644 44 21 48 to your Phone Contacts on Whatsapp.<br>2. Send the following message: \"I allow callmebot to send me messages\" to the new Contact created.<br>3. Wait until you receive the message \"API Activated for your phone number. Your APIKEY is XXXXXX\" from the bot.</p>";
+  s += "<form action=\"data\">";
+  s += "<h3>Please enter your phone number :</h3>";
+  s += "<input type=\"text\" name=\"number\">";
+  s += "<br><br>";
+  s += "<h3>Please enter your API Key :</h3>";
+  s += "<input type=\"text\" name=\"key\">";
+  s += "<br><br>";
+  s += "<input type=\"submit\" value=\"submit\"></form><br>";
+  s += "</body></html>"; // Read HTML contents
+  server.send(200, "text/html", s); // Send web page
+}
+
+// Function to display confirmation page after submitting data
+void confirmed() {
+  String s = "";
+  s += "<html>";
+  s += "<head>";
+  s += "<title>Special Blue</title>";
+  s += "</head>";
+  s += "<body
